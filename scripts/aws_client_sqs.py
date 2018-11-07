@@ -30,7 +30,7 @@ class SqsClient(aws_client.AwsClient):
 
     def create_sqs(self):
         qname = self.config.create_name_with_separator(self.config.get_sqs())
-        self.log.info('Env:%s Creating SQS:%s', self.config.get_env(), qname)
+        self.log.info('Prefix:%s Creating SQS:%s', self.config.get_prefix(), qname)
         q = self.client.create_queue(
             QueueName=qname
         )
