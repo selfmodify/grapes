@@ -15,7 +15,7 @@ import arg_parser
 
 def setup_and_parse_args():
     parser = arg_parser.create_parser(desc="""
-    Setup AWS SQS in the specified environment/region. Environment implies both region and its use case
+    Setup AWS SQS in the specified prefix/region. prefix implies use case
 
     Example usage:
     python ./sqs_create.py --file=<config-file.yaml>        # (region us-east-1, developer environment)

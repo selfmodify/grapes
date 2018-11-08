@@ -9,7 +9,7 @@ import arg_parser
 
 def setup_and_parse_args():
     parser = arg_parser.create_parser(desc="""
-    Setup ELB in the specified environment/region. Environment implies both region and its use case
+    Setup ELB in the specified prefix/region. Prefix implies use case
 
     Example usage:
     python ./elb_create.py --file=<config-file.yaml>        # (region us-east-1, developer environment)

@@ -170,6 +170,40 @@ class EcsCluster(aws_client.AwsClient):
             instanceIdMap[id] = i
         return instanceIds, instanceIdMap
 
+    def _get_inactive_task_definitions(self):
+        response = self.client.list_task_definitions(
+            familyPrefix=self.config.get_task_definition_name(),
+            status='INACTIVE'
+        )
+        try:
+        	return response['taskDefinitionArns']
+        except:
+        	return []
+
+    def _get_inactive_running_tasks(self):
+        task_arns = []
+        inactive_task_definitions = self._get_inactive_task_definitions()
+        self.log.info('Found %d inactive task definitions', len(inactive_task_definitions))
+        self.log.info(inactive_task_definitions)
+        if len(inactive_task_definitions) == 0:
+            return task_arns
+        task_response = self.client.list_tasks(
+            cluster=self.config.get_ecs_cluster_name(),
+            desiredStatus='RUNNING'
+        )
+        if task_response['taskArns'] is None:
+            return task_arns
+        response = self.client.describe_tasks(
+            cluster=self.config.get_ecs_cluster_name(),
+            tasks=task_response['taskArns']
+        )
+        if response['tasks'] is None:
+            return task_arns
+        for task in response['tasks']:
+            if task['taskDefinitionArn'] in inactive_task_definitions:
+                task_arns.append(task['taskArn'])
+        return task_arns
+
     def rolling_upgrade_service(self):
         # Get instances attached to this target group which will be terminated
         # once rolling upgrade is done.
@@ -247,10 +281,34 @@ class EcsCluster(aws_client.AwsClient):
                         'healthyTargetCount:%d has reached desiredCount:%d.', healthy_targets, new_desired)
                     break
                 self.log.info(
-                    'Waiting for healthyTargetCount:%d to catch upto desiredCount:%d.', healthy_targets, new_desired)
+                    'Waiting for healthyTargetCount:%d to catch up to upscaled desiredCount:%d.', healthy_targets, new_desired)
                 time.sleep(30)
+
+        inactive_tasks = self._get_inactive_running_tasks()
+        self.log.info('Found %d tasks listed as inactive and running', len(inactive_tasks))
+        for task in inactive_tasks:
+            self.log.info('Task \'%s\' is listed as inactive', task)
+
         as_client.update_capacity_to(
             original_min, original_max, original_desired)
+
+        # Step 5: Wait for the targets to disappear from the LB before decreasing the number of tasks
+        while True:
+            _, instanceIdMap = self._get_running_targets(elb, tg_arn)
+            num_targets = len(instanceIdMap)
+            if num_targets == original_desired:
+                self.log.warn(
+                    'targetCount:%d has reached desiredCount:%d.', num_targets, original_desired)
+                break
+            if num_targets < original_desired:
+                self.log.warn(
+                    'targetCount:%d IS BELOW desiredCount:%d.', num_targets, original_desired)
+                break
+            self.log.info(
+                'Waiting for targetCount:%d to catch up to original desiredCount:%d.', num_targets, original_desired)
+            time.sleep(30)
+
+        # Step 6: Drop the number of tasks
         app_as_client.update_ecs_autoscaling_parameters(original_min, original_max)
 
     def create_taskd(self):

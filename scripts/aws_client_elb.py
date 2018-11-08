@@ -68,11 +68,22 @@ class ElbClient(aws_client.AwsClient):
             )
 
     def create_load_balancer(self):
-        response = self.client.create_load_balancer(
-            Name=self.config.get_lb_name(),
-            Subnets=self.config.get_subnets(),
-            SecurityGroups=self.config.get_security_groups(),
-        )
+        type = self.config.get_lb_type()
+        kwargs = {}
+        if type == 'network':
+            kwargs = {
+                'Name': self.config.get_lb_name(),
+                'Type': self.config.get_lb_type(),
+                'Subnets': self.config.get_subnets(),
+            }
+        else:
+            kwargs = {
+                'Name': self.config.get_lb_name(),
+                'Type': self.config.get_lb_type(),
+                'Subnets': self.config.get_subnets(),
+                'SecurityGroups': self.config.get_security_groups(),
+            }
+        response = self.client.create_load_balancer(**kwargs)
         # log some information
         self.log.info('LB creation response: %s', response)
         the_lb = None
@@ -143,12 +154,11 @@ class ElbClient(aws_client.AwsClient):
         # TODO :Create TargetGroup before creating listener.
         self.lb_arn = lb_arn
         self.tg_arn = target_group['TargetGroupArn']
-        port, protocol, certs = self.config.get_listener_info()
+        port, protocol = self.config.get_main_listener_info()
         response = self.client.create_listener(
             LoadBalancerArn=self.lb_arn,
             Protocol=protocol,
             Port=port,
-            Certificates=certs,
             DefaultActions=[
                 {
                     'Type': 'forward',
@@ -156,6 +166,32 @@ class ElbClient(aws_client.AwsClient):
                 }
             ]
         )
+
+        alt_listeners = self.config.get_alt_listener_infos()
+        self.log.info(alt_listeners)
+        if alt_listeners is not None:
+            for listener in alt_listeners:
+                self.log.info(listener)
+                certs = []
+                if listener['cert_arn'] is not None:
+                    certs = [
+                    {
+                        'CertificateArn': listener['cert_arn']
+                    }
+                ]
+                response = self.client.create_listener(
+                    LoadBalancerArn=self.lb_arn,
+                    Protocol=listener['protocol'],
+                    Port=listener['port'],
+                    Certificates=certs,
+                    DefaultActions=[
+                        {
+                            'Type': 'forward',
+                            'TargetGroupArn': self.tg_arn,
+                        }
+                    ]
+                )
+
         # log some information
         self.log.debug("LBListeners: %s", response)
         for listener in response['Listeners']:
@@ -163,11 +199,14 @@ class ElbClient(aws_client.AwsClient):
                 self.listener_arn = listener['LoadBalancerArn']
                 self.log.info("Created/Updated LBListener: LBArn:%s TargetGroupArn:%s",
                               self.listener_arn, action['TargetGroupArn'])
+
         return response
 
     def create_or_update_target_group(self):
         tg_name = self.config.get_tg_name()
+        tg_protocol = self.config.get_tg_protocol()
         port, path, healthy_threshold, healthy_check_interval = self.config.get_tg_health_check_info()
+        kwargs = {}
         try:
             # If there is one that already exists then modify that
             response = self.client.describe_target_groups(
@@ -178,24 +217,48 @@ class ElbClient(aws_client.AwsClient):
             # Modify the existing one. Only some parameters can be modified without
             # taking down the entire TG/LB/Listeners.
             tg_arn = response['TargetGroups'][0]['TargetGroupArn']
-            response = self.client.modify_target_group(
-                TargetGroupArn=tg_arn,
-                HealthCheckPath=path,
-                HealthCheckIntervalSeconds=healthy_check_interval,
-                HealthyThresholdCount=healthy_threshold,
-            )
+            if tg_protocol == 'TCP':
+                kwargs = {
+                    'TargetGroupArn': tg_arn,
+                    'HealthCheckIntervalSeconds': healthy_check_interval,
+                    'HealthyThresholdCount': healthy_threshold,
+                    'UnhealthyThresholdCount': healthy_threshold,
+                }
+            else:
+                kwargs = {
+                    'TargetGroupArn': tg_arn,
+                    'HealthCheckPath': path,
+                    'HealthCheckIntervalSeconds': healthy_check_interval,
+                    'HealthyThresholdCount': healthy_threshold,
+                }
+            response = self.client.modify_target_group(**kwargs)
         except:
             # No Target group found
-            response = self.client.create_target_group(
-                Name=tg_name,
-                Protocol='HTTP',
-                Port=port,
-                VpcId=self.config.get_vpc(),
-                HealthCheckPort=str(port),
-                HealthCheckPath=path,
-                HealthCheckIntervalSeconds=healthy_check_interval,
-                HealthyThresholdCount=healthy_threshold,
-            )
+            if tg_protocol == 'TCP':
+                kwargs = {
+                    'Name': tg_name,
+                    'Protocol': tg_protocol,
+                    'Port': port,
+                    'VpcId': self.config.get_vpc(),
+                    'HealthCheckProtocol': tg_protocol,
+                    'HealthCheckPort': str(port),
+                    'HealthCheckIntervalSeconds': healthy_check_interval,
+                    'HealthyThresholdCount': healthy_threshold,
+                    'UnhealthyThresholdCount': healthy_threshold,
+                }
+            else:
+                kwargs = {
+                    'Name': tg_name,
+                    'Protocol': tg_protocol,
+                    'Port': port,
+                    'VpcId': self.config.get_vpc(),
+                    'HealthCheckProtocol': tg_protocol,
+                    'HealthCheckPort': str(port),
+                    'HealthCheckPath': path,
+                    'HealthCheckIntervalSeconds': healthy_check_interval,
+                    'HealthyThresholdCount': healthy_threshold,
+                }
+            response = self.client.create_target_group(**kwargs)
             tg_arn = response['TargetGroups'][0]['TargetGroupArn']
         # Modify the target group attribute if any
         stickiness, drain_timeout = self.config.get_tg_attributes()

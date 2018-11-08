@@ -1,8 +1,8 @@
 #!/bin/python
 
 """
-Use get('staging') (or 'prod') to get the service definition based on environment.
-Service definition is a JSON object containing the names of the various resources like 'SQS', 'LB' based on the environment
+Use get('staging') (or 'prod') to get the service definition based on configuration file.
+Service definition is a JSON object containing the names of the various resources like 'SQS', 'LB' based on the prefix and region
 """
 
 import string
@@ -14,17 +14,12 @@ import sys
 import yaml_with_custom_extn
 
 
-class Env():
+class Config():
     """
     Composition of the various services and their values.
     """
     state = {}
-    envName = ''
-    region = ''
-    envSuffix = ''
-    regionSuffix = ''
     log = None
-    prefix = ''
 
     def __init__(self, config):
         self.state = config
@@ -33,11 +28,14 @@ class Env():
         self.lb_name_key = 'lb_name'
         self.tg_name_key = 'tg_name'
         self.ec2_name_key = 'ec2_name'
-        required_keys = [self.ecs_cluster_name_key, 'env', 'region', 'prefix']
+        required_keys = [self.ecs_cluster_name_key, 'region', 'prefix']
         for k in required_keys:
             if k not in config:
                 raise KeyError('Missing required ' +
                                k + ' name in config file')
+
+    def get_prefix(self):
+        return self.state['prefix']
 
     def get_prefix_str(self):
         prefix_str = self.state['prefix']
@@ -57,6 +55,12 @@ class Env():
         else:
             service_type_str = ''
         return service_type_str
+
+    def get_service_version(self):
+        return self.state['docker_image_tag']
+
+    def get_cmdline_env_flag(self):
+        return self.state['cmdline_env_flag']
 
     def create_name_with_separator(self, name_array):
         """
@@ -95,9 +99,15 @@ class Env():
         name = self.create_name_with_separator(self.state[self.lb_name_key])
         return name
 
+    def get_lb_type(self):
+        return self.state['lb_type']
+
     def get_tg_name(self):
         name = self.create_name_with_separator(self.state[self.tg_name_key])
         return name
+
+    def get_tg_protocol(self):
+        return self.state['tg_protocol']
 
     def get_as_name(self):
         name = self.create_name_with_separator(
@@ -148,21 +158,15 @@ class Env():
             'tg_connection_drain_timeout', None)
         return tg_stickiness, tg_connection_drain_timeout
 
-    def get_listener_info(self):
+    def get_main_listener_info(self):
         port = self.state['lb_port']
-        protocol = 'HTTP'
-        certs = []
-        if 'listener_port' in self.state:
-            port = self.state['listener_port']
-        if 'listener_protocol' in self.state:
-            protocol = self.state['listener_protocol']
-        if 'listener_cert_arn' in self.state:
-            certs = [
-                {
-                    'CertificateArn': self.state['listener_cert_arn']
-                }
-            ]
-        return port, protocol, certs
+        protocol = self.state['tg_protocol']
+        return port, protocol
+
+    def get_alt_listener_infos(self):
+        if 'lb_listeners' in self.state:
+            return self.state['lb_listeners']
+        return []
 
     def get_lb_timeouts(self):
         lb_idle_timeout = self.state.get('lb_idle_timeout', None)
@@ -184,9 +188,6 @@ class Env():
             self.ec2_name_key: self.get_ec2_name(),
         }
         return m
-
-    def get_env(self):
-        return self.state['env']
 
     def get_ssh_key(self):
         return self.state['sshkey']
@@ -265,24 +266,24 @@ class Env():
         return json.dumps(js, indent=4)
 
 
-def load_env_from(filename):
+def load_config_from(filename):
     """
     Load YAML file without any custom mapping
     """
     with open(filename, 'r') as stream:
-        config = yaml.safe_load(stream)
-        env = Env(config)
-        return env
+        config_data = yaml.safe_load(stream)
+        config = Config(config_data)
+        return config
 
 
-def load_env_with_extension(filename, custom_fn_map):
+def load_config_with_extension(filename, custom_fn_map):
     """
     Load YAML file with custom mapping.
     E.g. RTC yaml file can specific a function to get the audio/video server
     LB address and set it in the task definition command line params.
     If |custom_fn_map| is None then no mapping is loaded
     """
-    config = yaml_with_custom_extn.load_config_with_custom_extension(
+    config_data = yaml_with_custom_extn.load_config_with_custom_extension(
         filename, custom_fn_map)
-    env = Env(config)
-    return env
+    config = Config(config_data)
+    return config

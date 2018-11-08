@@ -6,7 +6,7 @@ Creates the standard argument parser for use by the AWS CLI scripts
 
 import argparse
 import sys
-import service_env
+import service_config
 import tempfile
 import logger
 import string
@@ -18,7 +18,6 @@ logger = logger.getLogger()
 def create_parser(desc):
     parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                      description=desc)
-    # Add the standard --env argument
     parser.add_argument('--file',
                         required=True, help='The cluster config file')
     return parser
@@ -63,7 +62,7 @@ def parse_config_from(filename, custom_fn_map=None):
     Return the parsed cluster config file.
     """
     preprocessed_file = preprocess_yaml_file(filename)
-    return service_env.load_env_with_extension(preprocessed_file, custom_fn_map)
+    return service_config.load_config_with_extension(preprocessed_file, custom_fn_map)
 
 
 def parse_config_from_args(parser, custom_fn_map=None):
@@ -72,6 +71,6 @@ def parse_config_from_args(parser, custom_fn_map=None):
     """
     args = parse(parser)
     preprocessed_file = preprocess_yaml_file(args.file)
-    env = service_env.load_env_with_extension(preprocessed_file, custom_fn_map)
+    config = service_config.load_config_with_extension(preprocessed_file, custom_fn_map)
     # Check basic things in the config file
-    return env, args
+    return config, args
