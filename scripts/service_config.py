@@ -102,6 +102,9 @@ class Config():
     def get_lb_type(self):
         return self.state['lb_type']
 
+    def get_lb_scheme(self):
+        return self.state['lb_scheme']
+
     def get_tg_name(self):
         name = self.create_name_with_separator(self.state[self.tg_name_key])
         return name
@@ -240,9 +243,10 @@ class Config():
         return threshold
 
     def get_launch_ec2_with_public_ip(self):
-        return self.state.get('launch_ec2_with_public_ip',
-                              True  # FIXME: Should be False by default, revisit
-                              )
+        # True by default because ECS requires either that or a complex NAT.
+        # Without NAT, use security groups and/or internal load balancers 
+        # to better protect these instances
+        return self.state.get('ec2_use_public_ip', True)
 
     def get_auto_scale_params(self):
         min = self.state['auto_scale_group']['min']

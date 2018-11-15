@@ -5,6 +5,7 @@ Creates the ECS Cluster
 """
 
 import argparse
+import aws_client_ec2
 import aws_client_ecs
 import string
 import ec2

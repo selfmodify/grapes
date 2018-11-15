@@ -227,7 +227,7 @@ class EcsCluster(aws_client.AwsClient):
             self.log.info(
                 'Ensuring # of tasks are set to the original desired capacity')
             as_client.update_capacity_to(
-                original_min, original_max, original_desired)
+                original_min, original_max, original_desired, "OldestInstance")
             running, desired = self._get_task_count()
             while True:
                 if running == desired:
@@ -251,7 +251,7 @@ class EcsCluster(aws_client.AwsClient):
                       new_min, new_max, new_desired)
         app_as_client.update_ecs_autoscaling_parameters(new_min, new_max)
         as_client.update_capacity_and_task_definition(
-            new_min, new_max, new_desired)
+            new_min, new_max, new_desired, "")
         running, desired = self._get_task_count()
         while True:
             if running >= desired:
@@ -290,14 +290,14 @@ class EcsCluster(aws_client.AwsClient):
             self.log.info('Task \'%s\' is listed as inactive', task)
 
         as_client.update_capacity_to(
-            original_min, original_max, original_desired)
+            original_min, original_max, original_desired, "OldestInstance")
 
         # Step 5: Wait for the targets to disappear from the LB before decreasing the number of tasks
         while True:
             _, instanceIdMap = self._get_running_targets(elb, tg_arn)
             num_targets = len(instanceIdMap)
             if num_targets == original_desired:
-                self.log.warn(
+                self.log.info(
                     'targetCount:%d has reached desiredCount:%d.', num_targets, original_desired)
                 break
             if num_targets < original_desired:
@@ -308,8 +308,9 @@ class EcsCluster(aws_client.AwsClient):
                 'Waiting for targetCount:%d to catch up to original desiredCount:%d.', num_targets, original_desired)
             time.sleep(30)
 
-        # Step 6: Drop the number of tasks
+        # Step 6: Drop the number of tasks, restore termination policy to default
         app_as_client.update_ecs_autoscaling_parameters(original_min, original_max)
+        as_client.update_capacity_to(original_min, original_max, original_desired, "")
 
     def create_taskd(self):
         """ ECS Create Task Definition """
@@ -404,6 +405,7 @@ class EcsCluster(aws_client.AwsClient):
                 0,  # min
                 0,  # max
                 0,  # desired
+                "", # termination_policy
             )
             self.client.delete_service(
                 cluster=cluster_name,

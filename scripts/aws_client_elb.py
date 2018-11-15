@@ -75,6 +75,7 @@ class ElbClient(aws_client.AwsClient):
                 'Name': self.config.get_lb_name(),
                 'Type': self.config.get_lb_type(),
                 'Subnets': self.config.get_subnets(),
+                'Scheme': self.config.get_lb_scheme(),
             }
         else:
             kwargs = {
@@ -82,6 +83,7 @@ class ElbClient(aws_client.AwsClient):
                 'Type': self.config.get_lb_type(),
                 'Subnets': self.config.get_subnets(),
                 'SecurityGroups': self.config.get_security_groups(),
+                'Scheme': self.config.get_lb_scheme(),
             }
         response = self.client.create_load_balancer(**kwargs)
         # log some information

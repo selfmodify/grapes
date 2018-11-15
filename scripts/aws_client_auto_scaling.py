@@ -176,7 +176,7 @@ class AutoScalingClient(aws_client.AwsClient):
             'Associating AutoScalingGroup: %s to LoadBalancer ARN: %s', self.as_group_name, lb_arn)
         self.log.debug('Response: %s', response)
 
-    def update_capacity_and_task_definition(self, min_value, max_value, desired):
+    def update_capacity_and_task_definition(self, min_value, max_value, desired, termination_policy):
         _, _, _, availability_zones, vpc_zone_identifier, _ = self.config.get_auto_scale_params()
         tdname = self.config.get_task_definition_name()
         self.log.info(
@@ -196,6 +196,8 @@ class AutoScalingClient(aws_client.AwsClient):
                 'minimumHealthyPercent': 100,
             },
         )
+        if termination_policy == "":
+            termination_policy = "Default"
         response = self.client.update_auto_scaling_group(
             AutoScalingGroupName=self.as_group_name,
             LaunchConfigurationName=self.launch_configuration_name,
@@ -204,16 +206,19 @@ class AutoScalingClient(aws_client.AwsClient):
             DesiredCapacity=desired,
             VPCZoneIdentifier=vpc_zone_identifier,
             AvailabilityZones=availability_zones,
+            TerminationPolicies=[termination_policy],
         )
         self.log.debug("Response: %s", response)
         return response
 
-    def update_capacity_to(self, min_value, max_value, desired):
+    def update_capacity_to(self, min_value, max_value, desired, termination_policy):
         self.log.info('Updated desired capacity to %s', desired)
         self.update_service_auto_scale_count(desired)
         _, _, _, availability_zones, vpc_zone_identifier, cooldown = self.config.get_auto_scale_params()
-        self.log.info('Updating auto scaling group capacity min:%d max:%d desired:%d availability_zones:%s vpc_zone_identifier: %s',
-                      min_value, max_value, desired, availability_zones, vpc_zone_identifier)
+        if termination_policy == "":
+            termination_policy = "Default"
+        self.log.info('Updating auto scaling group capacity min:%d max:%d desired:%d availability_zones:%s vpc_zone_identifier: %s termination_policy: %s',
+                      min_value, max_value, desired, availability_zones, vpc_zone_identifier, termination_policy)
         response = self.client.update_auto_scaling_group(
             AutoScalingGroupName=self.as_group_name,
             LaunchConfigurationName=self.launch_configuration_name,
@@ -223,6 +228,7 @@ class AutoScalingClient(aws_client.AwsClient):
             DefaultCooldown=cooldown,
             VPCZoneIdentifier=vpc_zone_identifier,
             AvailabilityZones=availability_zones,
+            TerminationPolicies=[termination_policy],
         )
         self.log.debug("Response: %s", response)
         return response
@@ -230,12 +236,13 @@ class AutoScalingClient(aws_client.AwsClient):
     def set_capacity_to_zero(self):
         return self.update_capacity_to(min_value=0,
                                        max_value=0,
-                                       desired=0)
+                                       desired=0,
+                                       termination_policy="")
 
     def update_capacity(self):
         """
         Update Min/Max/Desired count for auto scaling group.
         """
         min_value, max_value, desired_value, _, _, _ = self.config.get_auto_scale_params()
-        return self.update_capacity_to(min_value, max_value, desired_value)
+        return self.update_capacity_to(min_value, max_value, desired_value, "")
 
