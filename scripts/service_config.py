@@ -210,6 +210,15 @@ class Config():
     def get_subnets(self):
         return self.state['subnets']
 
+    def get_volume_name(self):
+        return self.state['volume_name']
+
+    def get_volume_size(self):
+        return self.state['volume_size']
+
+    def get_volume_basesize(self):
+        return self.state['volume_basesize']
+
     def get_task_def_network_mode(self):
         return self.state.get('task_def_network_mode', 'bridge')
 

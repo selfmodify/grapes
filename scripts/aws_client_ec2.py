@@ -35,7 +35,7 @@ class EC2Client(aws_client.AwsClient):
             IamInstanceProfile={
                 #     # 'Arn' : 'arn:aws:iam::144245539133:role/ecsInstanceRole'
                 #     'Arn': 'arn:aws:iam::144245539133:instance-profile/ecsInstanceRole',
-                "Name": self.config.get_get_ec2_iam_role(),
+                "Name": self.config.get_ec2_iam_role(),
             },
             SecurityGroupIds=self.config.get_security_groups(),
             TagSpecifications=[

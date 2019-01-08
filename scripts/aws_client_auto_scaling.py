@@ -118,6 +118,14 @@ class AutoScalingClient(aws_client.AwsClient):
             return response
         # Create a new one
         response = self.client.create_launch_configuration(
+            BlockDeviceMappings=[
+                {
+                    'DeviceName': self.config.get_volume_name(),
+                    'Ebs': {
+                        'VolumeSize': self.config.get_volume_size()
+                    }
+                }
+            ],
             LaunchConfigurationName=self.launch_configuration_name,
             ImageId=self.config.get_ami(),
             KeyName=self.config.get_ssh_key(),
@@ -125,8 +133,30 @@ class AutoScalingClient(aws_client.AwsClient):
             IamInstanceProfile=self.config.get_ec2_iam_role(),
             InstanceType=self.config.get_instance_type(),
             AssociatePublicIpAddress=self.config.get_launch_ec2_with_public_ip(),
-            UserData="#!/bin/bash \n echo ECS_CLUSTER=" +
-            self.config.get_ecs_cluster_name() + " >> /etc/ecs/ecs.config"
+            #UserData="#!/bin/bash \n echo ECS_CLUSTER=" + self.config.get_ecs_cluster_name() + " >> /etc/ecs/ecs.config"
+            UserData="Content-Type: multipart/mixed; boundary=\"===============BOUNDARY==\" \n" +
+                "MIME-Version: 1.0 \n" +
+                "\n" +
+                "--===============BOUNDARY== \n" +
+                "MIME-Version: 1.0 \n" +
+                "Content-Type: text/x-shellscript; charset=\"us-ascii\" \n" +
+                "Content-Transfer-Encoding: 7bit \n" +
+                "Content-Disposition: attachment; filename=\"standard_userdata.txt\" \n" +
+                "\n" +
+                "#!/bin/bash \n" +
+                "echo ECS_CLUSTER=" + self.config.get_ecs_cluster_name() + " >> /etc/ecs/ecs.config \n" +
+                "\n" +
+                "\n" +
+                "--===============BOUNDARY== \n" +
+                "MIME-Version: 1.0 \n" +
+                "Content-Type: text/cloud-boothook; charset=\"us-ascii\" \n" +
+                "Content-Transfer-Encoding: 7bit \n" +
+                "Content-Disposition: attachment; filename=\"boothook.txt\" \n" +
+                "\n" +
+                "#cloud-boothook \n" +
+                "echo 'OPTIONS=\"${OPTIONS} --storage-opt dm.basesize=" + self.config.get_volume_basesize() + "\"' >> /etc/sysconfig/docker \n" +
+                "\n" +
+                "--===============BOUNDARY==--"
         )
         self.log.info("Response: %s", response)
         return response
