@@ -35,7 +35,7 @@ class EC2Client(aws_client.AwsClient):
             IamInstanceProfile={
                 #     # 'Arn' : 'arn:aws:iam::144245539133:role/ecsInstanceRole'
                 #     'Arn': 'arn:aws:iam::144245539133:instance-profile/ecsInstanceRole',
-                "Name": self.config.get_get_ec2_iam_role(),
+                "Name": self.config.get_ec2_iam_role(),
             },
             SecurityGroupIds=self.config.get_security_groups(),
             TagSpecifications=[
@@ -80,6 +80,22 @@ class EC2Client(aws_client.AwsClient):
                 ids.append(j['InstanceId'])
 
         return ids
+
+    def get_ip_dns_info(self, id):
+        public_dns = ""
+        public_ip = ""
+        private_dns = ""
+        private_ip = ""
+        response = self.client.describe_instances(InstanceIds=[id])
+        for i in response['Reservations']:
+            for j in i['Instances']:
+                private_dns = j['PrivateDnsName']
+                private_ip = j['PrivateIpAddress']
+                public_dns = j['PublicDnsName']
+                public_dns = j['PublicIpAddress']
+                break
+            break
+        return public_dns, public_ip, private_dns, private_ip
 
     def terminate_instances(self, instances):
         self.log.info('Terminating EC2 instances %s', instances)
